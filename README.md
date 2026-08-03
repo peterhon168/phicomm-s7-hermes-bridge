@@ -1,5 +1,7 @@
 # Phicomm S7 → Hermes bridge
 
+![Phicomm S7 to Hermes bridge](docs/assets/s7-hermes-bridge-hero.png)
+
 Self-hosted ingestion for Phicomm S7 measurements. The project keeps the
 source adapter replaceable and writes a stable local data contract for Hermes:
 
@@ -26,6 +28,8 @@ S7/zS7 → MQTT adapter ─────┘
 The internal measurement model is independent of Pai. If the vendor service
 disappears, historical data remains local and the MQTT/UART fallback can be
 used without changing the Hermes export contract.
+
+![Local-first failover architecture](docs/assets/s7-local-failover.png)
 
 ## Quick start
 
