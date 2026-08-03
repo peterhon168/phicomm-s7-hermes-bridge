@@ -1,0 +1,107 @@
+name: hermes-s7
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:2.1.2-alpine
+    # Root is used only to create/chown credential and persistence files;
+    # mosquitto.conf immediately drops the broker process to user mosquitto.
+    user: "0:0"
+    restart: unless-stopped
+    environment:
+      MQTT_USERNAME: "${MQTT_USERNAME:?set MQTT_USERNAME in deploy/.env}"
+      MQTT_PASSWORD: "${MQTT_PASSWORD:?set MQTT_PASSWORD in deploy/.env}"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        umask 077
+        case "$${MQTT_USERNAME}" in
+          ''|*[!A-Za-z0-9_-]*)
+            echo "MQTT_USERNAME may contain only letters, digits, underscore and hyphen" >&2
+            exit 2
+            ;;
+        esac
+        if [ "$${MQTT_PASSWORD}" = "replace-with-a-long-random-password" ] || \
+           [ "$${#MQTT_PASSWORD}" -lt 20 ]; then
+          echo "MQTT_PASSWORD must be changed and contain at least 20 characters" >&2
+          exit 2
+        fi
+        if [ -e /mosquitto/data/password_file ]; then
+          mosquitto_passwd -b /mosquitto/data/password_file "$${MQTT_USERNAME}" "$${MQTT_PASSWORD}"
+        else
+          mosquitto_passwd -b -c /mosquitto/data/password_file "$${MQTT_USERNAME}" "$${MQTT_PASSWORD}"
+        fi
+        printf 'user %s\ntopic readwrite device/zs7/#\ntopic write hermes-s7/health\n' \
+          "$${MQTT_USERNAME}" > /mosquitto/data/acl_file
+        chown -R mosquitto:mosquitto /mosquitto/data
+        chmod 0600 /mosquitto/data/password_file
+        chmod 0640 /mosquitto/data/acl_file
+        exec mosquitto -c /mosquitto/config/mosquitto.conf
+    ports:
+      - "${MQTT_BIND_ADDRESS:-127.0.0.1}:1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mqtt-data:/mosquitto/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mosquitto_pub -h 127.0.0.1 -u "$${MQTT_USERNAME}" -P "$${MQTT_PASSWORD}"
+          -q 0 -t hermes-s7/health -m ok
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
+  collector:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    user: "${HERMES_SCALE_UID:-10001}:${HERMES_SCALE_GID:-10001}"
+    read_only: true
+    environment:
+      HERMES_SCALE_MQTT_HOST: mqtt
+      HERMES_SCALE_MQTT_PORT: "1883"
+      HERMES_SCALE_MQTT_USERNAME: "${MQTT_USERNAME:?set MQTT_USERNAME in deploy/.env}"
+      HERMES_SCALE_MQTT_PASSWORD: "${MQTT_PASSWORD:?set MQTT_PASSWORD in deploy/.env}"
+      HERMES_SCALE_STORAGE_ROOT: /data/scale
+    volumes:
+      - type: bind
+        source: ./config.toml
+        target: /etc/hermes-s7/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${HERMES_SCALE_DIR:?set HERMES_SCALE_DIR in deploy/.env}"
+        target: /data/scale
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:${HEALTH_PORT:-18087}:8080"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3).read()
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  mqtt-data:

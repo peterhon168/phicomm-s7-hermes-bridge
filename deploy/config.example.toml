@@ -1,0 +1,49 @@
+[mqtt]
+host = "mqtt"
+port = 1883
+client_id = "hermes-s7-scale"
+username = "s7"
+password_env = "HERMES_SCALE_MQTT_PASSWORD"
+sensor_topic = "device/zs7/+/sensor"
+state_topic = "device/zs7/+/state"
+keepalive_seconds = 30
+tls = false
+
+[storage]
+root = "/data/scale"
+timezone = "Asia/Shanghai"
+
+[processing]
+session_window_seconds = 180
+outlier_threshold_kg = 0.50
+min_valid_weight_kg = 30.0
+max_valid_weight_kg = 200.0
+weight_divisor = "auto"
+ambiguity_margin_kg = 5.0
+recent_baseline_count = 7
+
+[health]
+enabled = true
+host = "0.0.0.0"
+port = 8080
+
+[pai]
+enabled = false
+base_url = "https://lsprod3.laisitech.com"
+auth_file = "/etc/hermes-s7/pai-auth.json"
+poll_interval_seconds = 60
+auto_claim = true
+
+[[people]]
+id = "person_a"
+name = "Person A"
+min_weight_kg = 85.0
+max_weight_kg = 110.0
+initial_weight_kg = 92.0
+
+[[people]]
+id = "person_b"
+name = "Person B"
+min_weight_kg = 45.0
+max_weight_kg = 70.0
+initial_weight_kg = 58.0

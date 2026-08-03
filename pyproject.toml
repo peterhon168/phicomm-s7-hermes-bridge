@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-s7-scale"
+version = "0.1.0"
+description = "Local Phicomm zS7 MQTT ingestion for Hermes"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "paho-mqtt==2.1.0",
+]
+
+[project.scripts]
+hermes-scale = "hermes_scale.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
