@@ -12,7 +12,7 @@ env_file="$script_dir/.env"
 config_file="$script_dir/config.toml"
 
 if [[ ! -r "$env_file" || ! -r "$config_file" ]]; then
-  echo "error: run deploy/configure-remote.sh as peter first" >&2
+  echo "error: run deploy/configure-remote.sh first, or create deploy/.env and deploy/config.toml" >&2
   exit 2
 fi
 
@@ -30,13 +30,32 @@ set +a
 : "${HEALTH_PORT:?missing HEALTH_PORT}"
 
 pai_auth_file="${PAI_AUTH_FILE:-$script_dir/pai-auth.json}"
-if [[ -e "$pai_auth_file" ]]; then
+pai_enabled=$(python3 - "$config_file" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    config = tomllib.load(handle)
+print("true" if config.get("pai", {}).get("enabled", False) else "false")
+PY
+)
+
+if [[ "$pai_enabled" == true ]]; then
+  if [[ ! -e "$pai_auth_file" ]]; then
+    echo "error: [pai].enabled=true but Pai auth file is missing: $pai_auth_file" >&2
+    exit 2
+  fi
   if [[ ! -r "$pai_auth_file" ]]; then
     echo "error: Pai auth file is not readable: $pai_auth_file" >&2
     exit 2
   fi
   if [[ "$(stat -c %a "$pai_auth_file")" != "600" ]]; then
     echo "error: Pai auth file must have mode 0600: $pai_auth_file" >&2
+    exit 2
+  fi
+  if [[ "$(stat -c %u "$pai_auth_file")" != "$HERMES_SCALE_UID" ]] || \
+     [[ "$(stat -c %g "$pai_auth_file")" != "$HERMES_SCALE_GID" ]]; then
+    echo "error: Pai auth file owner must match HERMES_SCALE_UID/GID ($HERMES_SCALE_UID:$HERMES_SCALE_GID)" >&2
     exit 2
   fi
   pai_auth_mount=(--mount "type=bind,src=$pai_auth_file,dst=/etc/hermes-s7/pai-auth.json,readonly")

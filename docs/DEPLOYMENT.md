@@ -5,7 +5,8 @@ values for the operator's own host; do not commit the resulting files.
 
 ## 1. Prepare configuration
 
-The host needs Docker Engine. Copy the templates and keep secrets local:
+The host needs Docker Engine. The native installer also uses Python 3.11+'s
+`tomllib` to validate the TOML file. Copy the templates and keep secrets local:
 
 ```bash
 cd deploy
@@ -20,8 +21,10 @@ Set a long random `MQTT_PASSWORD`, a LAN-only `MQTT_BIND_ADDRESS`, a writable
 with the configured owner before starting the container.
 
 If the Pai adapter is enabled, store its JSON auth file outside Git with mode
-`0600` and set `PAI_AUTH_FILE`. The installer mounts it read-only at
-`/etc/hermes-s7/pai-auth.json`.
+`0600`, owned by the configured `HERMES_SCALE_UID/GID`, and set `PAI_AUTH_FILE`.
+The native `install-with-docker.sh` installer mounts it read-only at
+`/etc/hermes-s7/pai-auth.json`. The checked-in Compose file is intentionally
+MQTT-only unless you add an equivalent read-only auth bind mount yourself.
 
 ## 2. Start the services
 
@@ -31,7 +34,7 @@ For a host with Compose v2:
 docker compose --env-file .env config --quiet
 docker compose --env-file .env up -d --build --wait --wait-timeout 120
 docker compose --env-file .env ps
-curl -fsS http://127.0.0.1:18087/health
+curl -fsS "http://127.0.0.1:${HEALTH_PORT:-18087}/health"
 ```
 
 The native Docker installer in `install-with-docker.sh` is useful on hosts
