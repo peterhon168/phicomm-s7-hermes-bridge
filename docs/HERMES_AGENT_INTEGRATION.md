@@ -14,6 +14,18 @@ The registration should state:
 - that Pai body-fat values are consumer estimates;
 - that a second person's records must not be written into a single-person diary.
 
+## Source precedence for health queries
+
+For a current or newly collected weight query, read the S7 summary first and use
+the latest finalized session under the requested `people.<id>` namespace. Do
+not report an older legacy-diary date as the latest reading before checking the
+summary. The legacy diary remains the source for older history, food and
+medication records.
+
+Do not automatically copy S7 measurements into the legacy diary. Only perform
+an explicit `person_a` projection, marked `source=pai-s7`, when a legacy-only
+consumer is specifically requested; never project the second person.
+
 ## Relationship to an existing health diary
 
 An existing single-person diary can remain a separate source for older history,
