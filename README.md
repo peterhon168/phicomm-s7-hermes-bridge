@@ -200,6 +200,17 @@ docker ps --filter name=hermes-s7-
 4. 用两个明显不同体重的测试用户各测一次，确认数据进入不同的
    `people.<id>` 分栏。体脂字段可能为空；无手柄时保留为派健康估算即可。
 
+如果升级前已经出现“按时间逆序返回、导致一次测量被拆成多个会话”，先部署包含
+本修复的版本，再在维护窗口执行：
+
+```bash
+cd /path/to/phicomm-s7-hermes-bridge/deploy
+sudo ./rebuild-sessions-with-docker.sh
+```
+
+脚本会短暂停止 collector，从 SQLite 原始测量账本按时间重建会话和导出文件，然后
+自动启动 collector；不会删除原始记录。
+
 ### 6. 一次性登记 HermesAgent 数据源
 
 在 Hermes 的 **health profile** 中登记：
@@ -235,6 +246,7 @@ docker ps --filter name=hermes-s7-
 | 派健康出现“数据认领” | 先手动认领一条确认账号链路；之后打开 `[pai] auto_claim = true`，collector 会自动认领。 |
 | `/health` 为 `degraded` | 查看 `pai_last_error` 和 collector 日志；常见原因是认证过期、主机无法访问派健康或数据目录权限错误。 |
 | 两个人分错栏 | 缩小并错开 `min_weight_kg`/`max_weight_kg`，保留足够的 `ambiguity_margin_kg`；不要为了“强行归类”扩大重叠范围。 |
+| 三次连续测量被拆成多个会话 | 先升级到包含 Pai 历史排序修复的版本，再运行 `sudo ./rebuild-sessions-with-docker.sh`；它会从 SQLite 重建，不会重复插入记录。 |
 | 体脂看起来不准 | 没有手持电极时它只是消费级估算；项目会保存字段，但不会伪造八电极结果。 |
 | MQTT 容器提示 `password_file` 已存在 | 不要删除持久卷；当前 entrypoint 会更新已有账户，重新执行安装脚本即可。 |
 

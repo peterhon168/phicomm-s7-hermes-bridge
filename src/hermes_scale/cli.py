@@ -43,6 +43,12 @@ def _parser() -> argparse.ArgumentParser:
 
     rebuild = subparsers.add_parser("rebuild-exports", help="rebuild JSONL/CSV/JSON from SQLite")
     rebuild.add_argument("--config", type=Path, required=True)
+    rebuild_sessions = subparsers.add_parser(
+        "rebuild-sessions",
+        help="rebuild sessions chronologically from the SQLite measurement ledger",
+    )
+    rebuild_sessions.add_argument("--config", type=Path, required=True)
+    rebuild_sessions.add_argument("--at", help="optional ISO-8601 finalization time")
     return parser
 
 
@@ -91,6 +97,14 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "rebuild-exports":
                 service.store.rebuild_exports()
                 print(json.dumps({"status": "rebuilt"}, ensure_ascii=False))
+            elif args.command == "rebuild-sessions":
+                count = service.rebuild_sessions(_datetime(args.at))
+                print(
+                    json.dumps(
+                        {"status": "rebuilt", "sessions": count},
+                        ensure_ascii=False,
+                    )
+                )
         return 0
     except (ConfigError, PayloadError, ValueError, OSError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -8,11 +8,53 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+_EARLIEST_PAI_TIME = datetime(2017, 1, 1, tzinfo=UTC)
+
+
+def _pai_record_sort_key(record: dict[str, Any]) -> tuple[datetime, str]:
+    """Return a chronological key without changing the source record.
+
+    Pai's history endpoint has returned rows out of order in practice.  The
+    storage layer groups sessions chronologically, so valid device timestamps
+    must be ordered before they are handed to the poller.  Rows without a
+    usable timestamp remain stable and are processed last.
+    """
+
+    raw_time = record.get("createTime", record.get("timestamp"))
+    candidate: datetime | None = None
+    if raw_time is not None and str(raw_time).strip():
+        text = str(raw_time).strip()
+        try:
+            numeric = Decimal(text)
+            if numeric.is_finite():
+                seconds = (
+                    float(numeric / Decimal(1000))
+                    if abs(numeric) > 100_000_000_000
+                    else float(numeric)
+                )
+                candidate = datetime.fromtimestamp(seconds, tz=UTC)
+        except (InvalidOperation, TypeError, ValueError, OSError, OverflowError):
+            try:
+                parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+                if parsed.tzinfo is not None:
+                    candidate = parsed.astimezone(UTC)
+            except ValueError:
+                candidate = None
+
+    now = datetime.now(UTC)
+    if candidate is None or candidate < _EARLIEST_PAI_TIME or candidate > now + timedelta(days=7):
+        candidate = datetime.max.replace(tzinfo=UTC)
+    tie_breaker = str(record.get("measureId", record.get("rawDataId", "")))
+    return candidate, tie_breaker
 
 
 class PaiApiError(RuntimeError):
@@ -220,4 +262,4 @@ class PaiApiClient:
         records = self.history()
         if not records:
             records = self.recent_home()
-        return records
+        return sorted(records, key=_pai_record_sort_key)

@@ -126,6 +126,32 @@ class MeasurementServiceTest(unittest.TestCase):
         self.assertEqual([result.status for result in second], ["duplicate", "duplicate"])
         self.assertEqual(self.service.stats()["raw_measurements"], 2)
 
+    def test_rebuild_sessions_rejoins_out_of_order_pai_history(self) -> None:
+        records = [
+            {"measureId": 3, "weight": 80.2, "createTime": int((self.base + timedelta(seconds=26)).timestamp() * 1000)},
+            {"measureId": 1, "weight": 80.0, "createTime": int(self.base.timestamp() * 1000)},
+            {"measureId": 2, "weight": 80.1, "createTime": int((self.base + timedelta(seconds=13)).timestamp() * 1000)},
+        ]
+        for record in records:
+            self.service.ingest_pai(record, self.base + timedelta(minutes=1))
+
+        self.service.maintenance(self.base + timedelta(minutes=10))
+        self.assertEqual(self.service.stats()["raw_measurements"], 3)
+        self.assertEqual(self.service.stats()["sessions"], 3)
+
+        rebuilt = self.service.rebuild_sessions(self.base + timedelta(minutes=10))
+        self.assertEqual(rebuilt, 1)
+        self.assertEqual(self.service.stats()["sessions"], 1)
+
+        with (self.root / "users" / "person_a" / "measurements.csv").open(
+            encoding="utf-8", newline=""
+        ) as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(rows[0]["status"], "finalized")
+        self.assertEqual(rows[0]["sample_count"], "3")
+        self.assertEqual(rows[0]["accepted_count"], "3")
+        self.assertAlmostEqual(float(rows[0]["weight_mean_kg"]), 80.1, places=3)
+
     def test_sensor_then_history_is_one_measurement(self) -> None:
         sensor = self.ingest(80.2, 0)
         payload = json.dumps(

@@ -81,6 +81,25 @@ class PaiTest(unittest.TestCase):
         self.assertEqual(records[0]["measureId"], 10)
         self.assertEqual(len(opener.requests), 3)
 
+    def test_sync_sorts_history_by_device_measurement_time(self) -> None:
+        auth = PaiAuth("a", "s", "v", "p", "tz", "t", "u", 7)
+        opener = FakeOpener(
+            [
+                {
+                    "code": "0",
+                    "data": {
+                        "historyDataBeanList": [
+                            {"measureId": 2, "weight": 82.2, "createTime": 1_700_000_002_000},
+                            {"measureId": 1, "weight": 82.1, "createTime": 1_700_000_001_000},
+                        ]
+                    },
+                }
+            ]
+        )
+        client = PaiApiClient(auth, opener=opener)
+        records = client.sync(auto_claim=False)
+        self.assertEqual([record["measureId"] for record in records], [1, 2])
+
     def test_service_records_bodyfat_and_deduplicates_measure_id(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -56,6 +56,9 @@ class MeasurementService:
     def maintenance(self, now: datetime | None = None) -> int:
         return self.store.finalize_expired(now)
 
+    def rebuild_sessions(self, now: datetime | None = None) -> int:
+        return self.store.rebuild_sessions(now)
+
     def stats(self) -> dict[str, object]:
         return self.store.stats()
 

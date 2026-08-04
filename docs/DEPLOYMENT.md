@@ -77,3 +77,12 @@ The health endpoint is intended for localhost monitoring. A transient vendor
 API failure marks the Pai status degraded while the collector continues retrying;
 an exited container is restarted by Docker. If the vendor disappears permanently,
 follow [FAILOVER.md](FAILOVER.md) and switch to a local source adapter.
+
+## 6. Rebuilding sessions after an ingestion-order fix
+
+The Pai history endpoint can return rows out of chronological order. After
+deploying a version that sorts Pai rows, run
+`sudo ./rebuild-sessions-with-docker.sh` during a maintenance window. The
+script stops the collector briefly, rebuilds `sessions` and `session_samples`
+from the immutable SQLite measurement ledger, rewrites JSONL/CSV/summary
+exports, and starts the collector again. It does not delete raw measurements.

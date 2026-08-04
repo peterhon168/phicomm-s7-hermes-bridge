@@ -293,6 +293,72 @@ class MeasurementStore:
                 self.rebuild_exports()
             return count
 
+    def rebuild_sessions(self, now: datetime | None = None) -> int:
+        """Rebuild session grouping from the immutable measurement ledger.
+
+        This is useful after correcting an ingestion-order bug.  Raw rows are
+        retained; only the derived ``sessions`` and ``session_samples`` tables
+        are recreated in chronological order, followed by deterministic file
+        exports.
+        """
+
+        current = self._ensure_utc(now or datetime.now(UTC))
+        with self._lock:
+            with self._conn:
+                rows = self._conn.execute(
+                    """
+                    SELECT event_id, device_id, topic, measured_at, received_at,
+                           timestamp_source, raw_weight, weight_kg, raw_bodyfat,
+                           bodyfat_pct, raw_payload, source_kind, person_id
+                    FROM raw_measurements
+                    WHERE person_id IS NOT NULL AND assignment_status = 'assigned'
+                    ORDER BY measured_at, event_id
+                    """
+                ).fetchall()
+                self._conn.execute("DELETE FROM session_samples")
+                self._conn.execute("DELETE FROM sessions")
+                for row in rows:
+                    measurement = Measurement(
+                        event_id=str(row["event_id"]),
+                        device_id=str(row["device_id"]),
+                        topic=str(row["topic"]),
+                        measured_at=self._parse_iso(str(row["measured_at"])),
+                        received_at=self._parse_iso(str(row["received_at"])),
+                        timestamp_source=str(row["timestamp_source"]),
+                        raw_weight=str(row["raw_weight"]),
+                        weight_kg=float(row["weight_kg"]),
+                        raw_payload={},
+                        source_kind=str(row["source_kind"]),
+                        bodyfat_pct=(
+                            float(row["bodyfat_pct"])
+                            if row["bodyfat_pct"] is not None
+                            else None
+                        ),
+                        raw_bodyfat=(
+                            str(row["raw_bodyfat"])
+                            if row["raw_bodyfat"] is not None
+                            else None
+                        ),
+                    )
+                    session_id = self._session_for_locked(
+                        measurement,
+                        str(row["person_id"]),
+                    )
+                    self._conn.execute(
+                        """
+                        INSERT INTO session_samples(session_id, event_id, accepted)
+                        VALUES (?, ?, 1)
+                        """,
+                        (session_id, measurement.event_id),
+                    )
+                    self._recompute_session_locked(session_id)
+                self._finalize_expired_locked(current)
+                session_count = self._conn.execute(
+                    "SELECT COUNT(*) FROM sessions"
+                ).fetchone()[0]
+            self.rebuild_exports()
+            return int(session_count)
+
     def rebuild_exports(self) -> None:
         with self._lock:
             rows = self._conn.execute(
