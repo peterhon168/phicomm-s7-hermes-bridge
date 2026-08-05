@@ -40,6 +40,7 @@ class MeasurementService:
         received_at: datetime | None = None,
         *,
         device_id: str = "pai-s7",
+        finalize: bool = True,
     ) -> IngestResult:
         """Ingest one normalized Pai Health history row."""
 
@@ -50,7 +51,8 @@ class MeasurementService:
         )
         assignment = self.matcher.assign(measurement.weight_kg, baselines)
         result = self.store.record(measurement, assignment)
-        self.store.finalize_expired(received)
+        if finalize:
+            self.store.finalize_expired(received)
         return result
 
     def maintenance(self, now: datetime | None = None) -> int:

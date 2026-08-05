@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import UTC, datetime
 from typing import Any
 
 from .config import PaiConfig
@@ -30,9 +31,14 @@ class PaiPoller:
         client = PaiApiClient(auth, base_url=self.config.base_url)
         records = client.sync(auto_claim=self.config.auto_claim)
         recorded = 0
+        received_at = datetime.now(UTC)
         for record in records:
             try:
-                result = self.service.ingest_pai(record)
+                result = self.service.ingest_pai(
+                    record,
+                    received_at,
+                    finalize=False,
+                )
             except PayloadError as exc:
                 # One malformed cloud row must not block valid rows in the
                 # same history response.  The row will be retried on the next
@@ -49,6 +55,10 @@ class PaiPoller:
                 result.person_id or "pending",
                 result.status,
             )
+        # Finalize once after the complete cloud batch is ingested.  Pai may
+        # upload a short measurement session several minutes late; finalizing
+        # after each row would split that session into singleton records.
+        self.service.maintenance(received_at)
         self.status.pai_synced(len(records), recorded)
         return recorded
 

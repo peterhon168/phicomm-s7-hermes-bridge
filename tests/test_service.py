@@ -152,6 +152,26 @@ class MeasurementServiceTest(unittest.TestCase):
         self.assertEqual(rows[0]["accepted_count"], "3")
         self.assertAlmostEqual(float(rows[0]["weight_mean_kg"]), 80.1, places=3)
 
+    def test_pai_batch_can_defer_finalization_until_all_rows_are_ingested(self) -> None:
+        received = self.base + timedelta(minutes=10)
+        records = [
+            {"measureId": 11, "weight": 80.0, "createTime": int(self.base.timestamp() * 1000)},
+            {"measureId": 12, "weight": 80.1, "createTime": int((self.base + timedelta(seconds=13)).timestamp() * 1000)},
+            {"measureId": 13, "weight": 80.2, "createTime": int((self.base + timedelta(seconds=26)).timestamp() * 1000)},
+        ]
+        for record in records:
+            result = self.service.ingest_pai(record, received, finalize=False)
+            self.assertEqual(result.status, "recorded")
+
+        self.service.maintenance(received)
+        with (self.root / "users" / "person_a" / "measurements.csv").open(
+            encoding="utf-8", newline=""
+        ) as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["sample_count"], "3")
+        self.assertEqual(rows[0]["accepted_count"], "3")
+
     def test_sensor_then_history_is_one_measurement(self) -> None:
         sensor = self.ingest(80.2, 0)
         payload = json.dumps(
