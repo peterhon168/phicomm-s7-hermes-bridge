@@ -122,6 +122,25 @@ class PaiTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_invalid_pai_bodyfat_does_not_drop_weight(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            service = MeasurementService(make_config(root))
+            try:
+                result = service.ingest_pai(
+                    {
+                        "measureId": 2002,
+                        "weight": 82.1,
+                        "bfr": "N/A",
+                        "createTime": 1785770000000,
+                    }
+                )
+                self.assertEqual(result.status, "recorded")
+                self.assertIsNone(result.bodyfat_pct)
+                self.assertEqual(service.stats()["raw_measurements"], 1)
+            finally:
+                service.close()
+
 
 if __name__ == "__main__":
     unittest.main()

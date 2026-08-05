@@ -6,6 +6,7 @@ from typing import Any
 
 from .config import PaiConfig
 from .pai_api import PaiApiClient, PaiApiError, PaiAuth
+from .parser import PayloadError
 from .service import MeasurementService
 
 
@@ -30,7 +31,14 @@ class PaiPoller:
         records = client.sync(auto_claim=self.config.auto_claim)
         recorded = 0
         for record in records:
-            result = self.service.ingest_pai(record)
+            try:
+                result = self.service.ingest_pai(record)
+            except PayloadError as exc:
+                # One malformed cloud row must not block valid rows in the
+                # same history response.  The row will be retried on the next
+                # poll after the source has corrected it.
+                LOGGER.warning("Skipping invalid Pai history row: %s", exc)
+                continue
             if result.status == "recorded":
                 recorded += 1
             LOGGER.info(

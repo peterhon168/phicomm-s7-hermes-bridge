@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -17,6 +18,9 @@ EARLIEST_DEVICE_TIME = datetime(2017, 1, 1, tzinfo=UTC)
 
 class PayloadError(ValueError):
     """Raised when an MQTT payload cannot be safely interpreted."""
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MeasurementParser:
@@ -83,7 +87,14 @@ class MeasurementParser:
         raw_weight = record.get("weight")
         raw_weight_text, weight_kg = self._normalize_weight(raw_weight)
         raw_bodyfat = record.get("bfr", record.get("bodyfat_pct"))
-        bodyfat_text, bodyfat_pct = self._normalize_bodyfat(raw_bodyfat)
+        try:
+            bodyfat_text, bodyfat_pct = self._normalize_bodyfat(raw_bodyfat)
+        except PayloadError as exc:
+            # Pai occasionally returns a placeholder or out-of-range BFR while
+            # the weight itself is valid.  Body-fat is optional; do not discard
+            # the complete measurement batch because this one field is bad.
+            LOGGER.warning("Ignoring invalid Pai body-fat field: %s", exc)
+            bodyfat_text, bodyfat_pct = None, None
         measured_at, timestamp_source = self._normalize_pai_time(
             record.get("createTime", record.get("timestamp")),
             received,
